@@ -1,0 +1,64 @@
+Current path=/home/mag/p_karitskaya
+node=gpuserv
+nproc=4
+102805
+/home/mag/p_karitskaya
+gpuserv
+4
+1
+=== Checking GPU availability ===
+Sun Nov  9 02:17:01 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 560.35.05              Driver Version: 560.35.05      CUDA Version: 12.6     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-PCIE-16GB           On  |   00000000:61:00.0 Off |                    0 |
+| N/A   59C    P0            135W /  250W |    3940MiB /  16384MiB |    100%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   1  Tesla V100-PCIE-16GB           On  |   00000000:DB:00.0 Off |                    0 |
+| N/A   35C    P0             25W /  250W |       9MiB /  16384MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A      6802      G   /usr/libexec/Xorg                             108MiB |
+|    0   N/A  N/A      7378      G   /usr/bin/gnome-shell                          144MiB |
+|    0   N/A  N/A   2530437      C   ./LBM_CUDA                                   3682MiB |
+|    1   N/A  N/A      6802      G   /usr/libexec/Xorg                               4MiB |
++-----------------------------------------------------------------------------------------+
+=== Compiling lab3.cu ===
+Compilation successful!
+=== Running lab3 program ===
+=== Dual GPU Processing ===
+Input: 820x626
+Found 2 CUDA devices
+Using GPUs 0 and 1
+Image split at height: 314 (overlap: 1 rows)
+GPU0: Tesla V100-PCIE-16GB
+GPU1: Tesla V100-PCIE-16GB
+[Dual GPU] Total execution time (blur): 0.119 ms (GPU0: 0.116, GPU1: 0.119)
+Found 2 CUDA devices
+Using GPUs 0 and 1
+Image split at height: 315 (overlap: 2 rows)
+GPU0: Tesla V100-PCIE-16GB
+GPU1: Tesla V100-PCIE-16GB
+[Dual GPU] Total execution time (strong_blur): 0.131 ms (GPU0: 0.130, GPU1: 0.131)
+Found 2 CUDA devices
+Using GPUs 0 and 1
+Image split at height: 314 (overlap: 1 rows)
+GPU0: Tesla V100-PCIE-16GB
+GPU1: Tesla V100-PCIE-16GB
+[Dual GPU] Total execution time (add_noise): 0.117 ms (GPU0: 0.115, GPU1: 0.117)
+Writing PNG: output_blur_dual.png
+Writing PNG: output_strong_blur_dual.png
+Writing PNG: output_noisy_dual.png
+Completed successfully!
+Job completed successfully!
