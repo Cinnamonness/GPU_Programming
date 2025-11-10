@@ -9,34 +9,26 @@
 // тип, который будут иметь элементы матриц
 #define BASE_TYPE float
 
-// Ядро для умножения матриц
-__global__ void matrixMult(const BASE_TYPE *A, const BASE_TYPE *B, BASE_TYPE *C, 
-                          int Arows, int Acols, int Bcols)
+// Ядро для сложения матриц
+__global__ void matrixAdd(const BASE_TYPE *A, const BASE_TYPE *B, BASE_TYPE *C, int rows, int cols)
 {
     // Вычисление индекса элемента матрицы на GPU
     int row = blockDim.y * blockIdx.y + threadIdx.y;
     int col = blockDim.x * blockIdx.x + threadIdx.x;
     
-    if (row < Arows && col < Bcols) {
-        BASE_TYPE sum = 0;
-        for (int k = 0; k < Acols; k++) {
-            sum += A[row * Acols + k] * B[k * Bcols + col];
-        }
-        C[row * Bcols + col] = sum;
+    if (row < rows && col < cols) {
+        int ind = row * cols + col;
+        C[ind] = A[ind] + B[ind];
     }
 }
 
-// Функция умножения матриц на CPU
-void matrixMultCPU(const BASE_TYPE *A, const BASE_TYPE *B, BASE_TYPE *C, 
-                  int Arows, int Acols, int Bcols)
+// Функция сложения матриц на CPU
+void matrixAddCPU(const BASE_TYPE *A, const BASE_TYPE *B, BASE_TYPE *C, int rows, int cols)
 {
-    for (int i = 0; i < Arows; i++) {
-        for (int j = 0; j < Bcols; j++) {
-            BASE_TYPE sum = 0;
-            for (int k = 0; k < Acols; k++) {
-                sum += A[i * Acols + k] * B[k * Bcols + j];
-            }
-            C[i * Bcols + j] = sum;
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            int ind = i * cols + j;
+            C[ind] = A[ind] + B[ind];
         }
     }
 }
@@ -74,46 +66,31 @@ int main()
     // Начало общего времени выполнения
     cudaEventRecord(start_total, 0);
     
-    int Arows = 500;
-    int Acols = 400;
-    int Brows = Acols;  // Для умножения матриц количество столбцов A должно равняться количеству строк B
-    int Bcols = 300;
+    int rows = 5000;
+    int cols = 8000;
     
-    printf("ПАРАМЕТРЫ ЗАДАЧИ УМНОЖЕНИЯ МАТРИЦ\n");
-    printf("  Размер матрицы A: %d x %d\n", Arows, Acols);
-    printf("  Размер матрицы B: %d x %d\n", Brows, Bcols);
-    printf("  Размер результирующей матрицы C: %d x %d\n", Arows, Bcols);
+    printf("Параметры задачи:\n");
+    printf("  Размер матриц: %d x %d\n", rows, cols);
     printf("  Размер блока: %d x %d\n", BLOCK_SIZE, BLOCK_SIZE);
     
     // Выравниваем размеры для оптимальной работы с блоками
-    Arows = toMultiple(Arows, BLOCK_SIZE);
-    Acols = toMultiple(Acols, BLOCK_SIZE);
-    Brows = toMultiple(Brows, BLOCK_SIZE);
-    Bcols = toMultiple(Bcols, BLOCK_SIZE);
+    rows = toMultiple(rows, BLOCK_SIZE);
+    cols = toMultiple(cols, BLOCK_SIZE);
     
-    printf("\nВЫРОВНЕННЫЕ РАЗМЕРЫ:\n");
-    printf("  Матрица A: %d x %d\n", Arows, Acols);
-    printf("  Матрица B: %d x %d\n", Brows, Bcols);
-    printf("  Матрица C: %d x %d\n", Arows, Bcols);
-    printf("  Общее количество элементов в C: %d\n", Arows * Bcols);
+    printf("  Выровненные размеры: %d x %d\n", rows, cols);
+    printf("  Общее количество элементов: %d\n", rows * cols);
     
-    size_t Asize = Arows * Acols * sizeof(BASE_TYPE);
-    size_t Bsize = Brows * Bcols * sizeof(BASE_TYPE);
-    size_t Csize = Arows * Bcols * sizeof(BASE_TYPE);
-    
-    printf("  Размер данных:\n");
-    printf("    - Матрица A: %.2f MB\n", (float)Asize / (1024 * 1024));
-    printf("    - Матрица B: %.2f MB\n", (float)Bsize / (1024 * 1024));
-    printf("    - Матрица C: %.2f MB\n", (float)Csize / (1024 * 1024));
-    printf("    - Всего: %.2f MB\n\n", (float)(Asize + Bsize + Csize) / (1024 * 1024));
+    size_t size = rows * cols * sizeof(BASE_TYPE);
+    printf("  Общий размер данных (одна матрица): %.2f MB\n", (float)size / (1024 * 1024));
+    printf("  Общий размер всех данных: %.2f MB\n\n", (float)(3 * size) / (1024 * 1024));
     
     printf("ВЫДЕЛЕНИЕ ПАМЯТИ И ИНИЦИАЛИЗАЦИЯ\n");
     
     // Выделение памяти под матрицы на хосте
-    BASE_TYPE *h_A = (BASE_TYPE *)malloc(Asize);      // Матрица A
-    BASE_TYPE *h_B = (BASE_TYPE *)malloc(Bsize);      // Матрица B
-    BASE_TYPE *h_C_cpu = (BASE_TYPE *)malloc(Csize);  // Результат (CPU)
-    BASE_TYPE *h_C_gpu = (BASE_TYPE *)malloc(Csize);  // Результат (GPU)
+    BASE_TYPE *h_A = (BASE_TYPE *)malloc(size);      // Матрица A
+    BASE_TYPE *h_B = (BASE_TYPE *)malloc(size);      // Матрица B
+    BASE_TYPE *h_C_cpu = (BASE_TYPE *)malloc(size);  // Результат (CPU)
+    BASE_TYPE *h_C_gpu = (BASE_TYPE *)malloc(size);  // Результат (GPU)
     
     if (h_A == NULL || h_B == NULL || h_C_cpu == NULL || h_C_gpu == NULL) {
         fprintf(stderr, "Ошибка выделения памяти на CPU!\n");
@@ -121,26 +98,23 @@ int main()
     }
     
     // Инициализация матриц случайными числами
-    printf("Инициализация матриц случайными числами...\n");
-    for (int i = 0; i < Arows * Acols; ++i) {
+    for (int i = 0; i < rows * cols; ++i) {
         h_A[i] = rand() / (BASE_TYPE)RAND_MAX;
-    }
-    for (int i = 0; i < Brows * Bcols; ++i) {
         h_B[i] = rand() / (BASE_TYPE)RAND_MAX;
     }
     
-    printf("\nУМНОЖЕНИЕ НА CPU\n");
+    printf("\nСЛОЖЕНИЕ НА CPU\n");
     
     cudaEventRecord(start_cpu, 0);
     
-    matrixMultCPU(h_A, h_B, h_C_cpu, Arows, Acols, Bcols);
+    matrixAddCPU(h_A, h_B, h_C_cpu, rows, cols);
     
     cudaEventRecord(stop_cpu, 0);
     cudaEventSynchronize(stop_cpu);
     
     float cpu_time;
     cudaEventElapsedTime(&cpu_time, start_cpu, stop_cpu);
-    printf("Время умножения на CPU: %.6f мс\n", cpu_time);
+    printf("Время сложения на CPU: %.6f мс\n", cpu_time);
     
     printf("\nВЫПОЛНЕНИЕ НА GPU\n");
     
@@ -151,20 +125,20 @@ int main()
     
     cudaEventRecord(start_mem, 0);
     
-    cudaError_t cudaStatus = cudaMalloc((void **)&d_A, Asize);
+    cudaError_t cudaStatus = cudaMalloc((void **)&d_A, size);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMalloc failed for d_A: %s\n", cudaGetErrorString(cudaStatus));
         return 1;
     }
     
-    cudaStatus = cudaMalloc((void **)&d_B, Bsize);
+    cudaStatus = cudaMalloc((void **)&d_B, size);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMalloc failed for d_B: %s\n", cudaGetErrorString(cudaStatus));
         cudaFree(d_A);
         return 1;
     }
     
-    cudaStatus = cudaMalloc((void **)&d_C, Csize);
+    cudaStatus = cudaMalloc((void **)&d_C, size);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMalloc failed for d_C: %s\n", cudaGetErrorString(cudaStatus));
         cudaFree(d_A);
@@ -173,7 +147,7 @@ int main()
     }
     
     // Копируем матрицы из CPU на GPU
-    cudaStatus = cudaMemcpy(d_A, h_A, Asize, cudaMemcpyHostToDevice);
+    cudaStatus = cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy HostToDevice failed for d_A: %s\n", cudaGetErrorString(cudaStatus));
         cudaFree(d_A);
@@ -182,7 +156,7 @@ int main()
         return 1;
     }
     
-    cudaStatus = cudaMemcpy(d_B, h_B, Bsize, cudaMemcpyHostToDevice);
+    cudaStatus = cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy HostToDevice failed for d_B: %s\n", cudaGetErrorString(cudaStatus));
         cudaFree(d_A);
@@ -202,8 +176,8 @@ int main()
     
     // Определяем размер блока и сетки
     dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
-    dim3 blocksPerGrid((Bcols + BLOCK_SIZE - 1) / BLOCK_SIZE, 
-                       (Arows + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dim3 blocksPerGrid((cols + BLOCK_SIZE - 1) / BLOCK_SIZE, 
+                       (rows + BLOCK_SIZE - 1) / BLOCK_SIZE);
     
     printf("Конфигурация запуска:\n");
     printf("  Блоков в сетке: (%d, %d)\n", blocksPerGrid.x, blocksPerGrid.y);
@@ -212,15 +186,15 @@ int main()
     printf("  Всего потоков: %d\n", blocksPerGrid.x * blocksPerGrid.y * 
                                    threadsPerBlock.x * threadsPerBlock.y);
     
-    // Многократный запуск ядра
-    const int iterations = 100;
+    // многократный запуск ядра 1000 раз
+    const int iterations = 1000;
     printf("  Количество итераций ядра: %d\n", iterations);
     
-    // Запуск ядра умножения многократно
+    // Запуск ядра сложения многократно
     cudaEventRecord(start_kernel, 0);
     
     for (int iter = 0; iter < iterations; iter++) {
-        matrixMult<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, Arows, Acols, Bcols);
+        matrixAdd<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, rows, cols);
         
         // Проверяем ошибки запуска ядра
         cudaStatus = cudaGetLastError();
@@ -260,7 +234,7 @@ int main()
     cudaEventRecord(start_mem, 0);
     
     // Копируем результат из GPU на CPU
-    cudaStatus = cudaMemcpy(h_C_gpu, d_C, Csize, cudaMemcpyDeviceToHost);
+    cudaStatus = cudaMemcpy(h_C_gpu, d_C, size, cudaMemcpyDeviceToHost);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy DeviceToHost failed: %s\n", cudaGetErrorString(cudaStatus));
         cudaFree(d_A);
@@ -304,57 +278,50 @@ int main()
     const int max_errors_to_show = 5;
     const int samples_to_check = 100;
     
-    // Проверяем правильность умножения для выборочных элементов
+    // Проверяем правильность сложения для выборочных элементов
     for (int k = 0; k < samples_to_check; k++) {
-        int i = rand() % Arows;
-        int j = rand() % Bcols;
-        int ind = i * Bcols + j;
-        
-        // Вычисляем ожидаемый результат
-        BASE_TYPE expected = 0;
-        for (int m = 0; m < Acols; m++) {
-            expected += h_A[i * Acols + m] * h_B[m * Bcols + j];
-        }
-        
+        int i = rand() % rows;
+        int j = rand() % cols;
+        int ind = i * cols + j;
+        BASE_TYPE expected = h_A[ind] + h_B[ind];
         BASE_TYPE result_gpu = h_C_gpu[ind];
         BASE_TYPE result_cpu = h_C_cpu[ind];
         
         // Проверяем совпадение GPU и CPU результатов
-        if (fabs(result_gpu - result_cpu) > 1e-3) {
+        if (fabs(result_gpu - result_cpu) > 1e-5) {
             if (errors < max_errors_to_show) {
-                printf("ОШИБКА: C[%d][%d]: CPU=%.6f, GPU=%.6f, разница=%.6f\n", 
-                       i, j, result_cpu, result_gpu, fabs(result_gpu - result_cpu));
+                printf("ОШИБКА: [%d][%d]: A=%.6f + B=%.6f = CPU=%.6f, GPU=%.6f\n", 
+                       i, j, h_A[ind], h_B[ind], result_cpu, result_gpu);
             }
             errors++;
         }
     }
     
     if (errors == 0) {
-        printf("Умножение выполнено корректно (проверено %d элементов)\n", samples_to_check);
-        
-        printf("\nПРИМЕР УМНОЖЕНИЯ (первые 2x2 элемента):\n");
-        printf("Матрица A[0-1][0-1]:\n");
-        for (int i = 0; i < 2; i++) {
-            for (int j = 0; j < 2; j++) {
-                int ind = i * Acols + j;
+        printf("Сложение выполнено корректно (проверено %d элементов)\n", samples_to_check);
+        printf("\nПример сложения (первые 3x3 элемента):\n");
+        printf("Матрица A[0-2][0-2]:\n");
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                int ind = i * cols + j;
                 printf("%8.4f ", h_A[ind]);
             }
             printf("\n");
         }
         
-        printf("\nМатрица B[0-1][0-1]:\n");
-        for (int i = 0; i < 2; i++) {
-            for (int j = 0; j < 2; j++) {
-                int ind = i * Bcols + j;
+        printf("\nМатрица B[0-2][0-2]:\n");
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                int ind = i * cols + j;
                 printf("%8.4f ", h_B[ind]);
             }
             printf("\n");
         }
         
-        printf("\nРезультат C[0-1][0-1] (A × B):\n");
-        for (int i = 0; i < 2; i++) {
-            for (int j = 0; j < 2; j++) {
-                int ind = i * Bcols + j;
+        printf("\nРезультат C[0-2][0-2] (A + B):\n");
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                int ind = i * cols + j;
                 printf("%8.4f ", h_C_gpu[ind]);
             }
             printf("\n");
@@ -368,32 +335,30 @@ int main()
     
     printf("\nАНАЛИЗ ПРОИЗВОДИТЕЛЬНОСТИ\n");
     
-    printf("Время выполнения умножения:\n");
-    printf("  CPU (одно умножение):          %9.6f мс\n", cpu_time);
+    printf("Время выполнения сложения:\n");
+    printf("  CPU (одно сложение):          %9.6f мс\n", cpu_time);
     printf("  GPU (общее с накладными):     %9.6f мс\n", gpu_total_time);
-    printf("  GPU (вычисления, %d умножений): %9.6f мс\n", iterations, kernel_time);
-    printf("  GPU (среднее на умножение):    %9.6f мс\n", avg_kernel_time);
+    printf("  GPU (вычисления, %d сложений): %9.6f мс\n", iterations, kernel_time);
+    printf("  GPU (среднее на сложение):    %9.6f мс\n", avg_kernel_time);
     
     if (cpu_time > 0 && avg_kernel_time > 0) {
         double speedup_kernel = cpu_time / avg_kernel_time;
         double speedup_total = cpu_time / gpu_total_time;
         double speedup_iterations = (cpu_time * iterations) / kernel_time;
         
-        printf("\nКОЭФФИЦИЕНТ УСКОРЕНИЯ:\n");
+        printf("\nКоэффициент ускорения:\n");
         printf("  Общее ускорение (CPU/GPU общее):           %.3f x\n", speedup_total);
         printf("  Ускорение вычислений (CPU/GPU на операцию): %.3f x\n", speedup_kernel);
         printf("  Общая производительность (%d операций):    %.3f x\n", iterations, speedup_iterations);
         
         // Дополнительная статистика
-        long long total_operations = (long long)Arows * Bcols * Acols * iterations;
-        double cpu_ops_per_sec = (Arows * Bcols * Acols) / (cpu_time / 1000.0);
+        long long total_operations = (long long)rows * cols * iterations;
+        double cpu_ops_per_sec = (rows * cols) / (cpu_time / 1000.0);
         double gpu_ops_per_sec = total_operations / (kernel_time / 1000.0);
         
         printf("\nДОПОЛНИТЕЛЬНАЯ СТАТИСТИКА:\n");
-        printf("  Операций на одно умножение: %d × %d × %d = %d\n", 
-               Arows, Bcols, Acols, Arows * Bcols * Acols);
-        printf("  Всего операций на CPU: %d FLOP\n", Arows * Bcols * Acols);
-        printf("  Всего операций на GPU: %lld FLOP\n", total_operations);
+        printf("  Всего операций на CPU: %d\n", rows * cols);
+        printf("  Всего операций на GPU: %lld\n", total_operations);
         printf("  FLOPs в секунду (CPU): %.0f\n", cpu_ops_per_sec);
         printf("  FLOPs в секунду (GPU): %.0f\n", gpu_ops_per_sec);
         
@@ -408,8 +373,8 @@ int main()
     }
     
     printf("\nРАСХОДЫ НА ПЕРЕДАЧУ ДАННЫХ:\n");
-    printf("   - Копирование %.2f MB на GPU: %.6f мс\n", (float)(Asize + Bsize) / (1024 * 1024), mem_time_1);
-    printf("   - Копирование %.2f MB с GPU: %.6f мс\n", (float)Csize / (1024 * 1024), mem_time_2);
+    printf("   - Копирование %.2f MB на GPU: %.6f мс\n", (float)(2 * size) / (1024 * 1024), mem_time_1);
+    printf("   - Копирование %.2f MB с GPU: %.6f мс\n", (float)size / (1024 * 1024), mem_time_2);
     printf("   - Итого на передачу данных: %.6f мс (%.1f%% общего времени GPU)\n", 
            total_mem_time, (total_mem_time/gpu_total_time)*100);
         
